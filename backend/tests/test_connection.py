@@ -1,8 +1,16 @@
-from core.database import engine
+import os
 
-try:
-    connection = engine.connect()
-    print('conectado ao banco')
-    connection.close()
-except Exception as e:
-    print("erro ao conectar: ", e)
+import pytest
+from sqlalchemy import text
+
+
+@pytest.mark.skipif(
+    not os.getenv("DATABASE_URL"),
+    reason="DATABASE_URL nao configurada para teste de integracao",
+)
+def test_database_connection_executes_select_1():
+    from core.database import engine
+
+    with engine.connect() as connection:
+        result = connection.execute(text("SELECT 1"))
+        assert result.scalar() == 1
