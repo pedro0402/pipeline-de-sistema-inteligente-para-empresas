@@ -2,6 +2,10 @@ import os
 
 import pytest
 from sqlalchemy import text
+from dotenv import load_dotenv
+
+
+load_dotenv()
 
 
 @pytest.mark.skipif(
