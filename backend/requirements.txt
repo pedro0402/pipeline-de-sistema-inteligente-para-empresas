@@ -5,3 +5,4 @@ SQLAlchemy==2.0.48
 typing_extensions==4.15.0
 pytest==7.4.3
 requests==2.31.0
+beautifulsoup4==4.13.4

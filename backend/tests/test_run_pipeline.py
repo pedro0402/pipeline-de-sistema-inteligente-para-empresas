@@ -22,6 +22,11 @@ def test_run_pipeline_executes_steps_in_order(monkeypatch, capsys):
     )
     monkeypatch.setattr(
         run_pipeline,
+        "save_to_db",
+        lambda items: executed_steps.append("save") or None,
+    )
+    monkeypatch.setattr(
+        run_pipeline,
         "report",
         lambda items: executed_steps.append("report") or None,
     )
@@ -29,9 +34,10 @@ def test_run_pipeline_executes_steps_in_order(monkeypatch, capsys):
     result = run_pipeline.main()
     captured = capsys.readouterr()
 
-    assert executed_steps == ["collect", "process", "analyze", "report"]
+    assert executed_steps == ["collect", "process", "analyze", "save", "report"]
     assert result == []
     assert "collect" in captured.out
     assert "process" in captured.out
     assert "analyze" in captured.out
+    assert "save" in captured.out
     assert "report" in captured.out
