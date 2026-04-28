@@ -1,16 +1,21 @@
+from collectors.pncp import scrape_pncp
 from collectors.prosas import scrape_prosas
 from core.database import SessionLocal
 from models.opportunity import Opportunity
 from models.source import Source
+from processing.pncp import process_pncp_opportunities
 from processing.prosas import process_prosas_opportunities
 
 
 def collect():
-    return scrape_prosas()
+    return scrape_prosas() + scrape_pncp()
 
 
 def process(items):
-    return process_prosas_opportunities(items)
+    prosas_items = [item for item in items if item.get("source_name") == "Prosas"]
+    pncp_items = [item for item in items if item.get("source_name") == "PNCP"]
+
+    return process_prosas_opportunities(prosas_items) + process_pncp_opportunities(pncp_items)
 
 
 def analyze(items):
