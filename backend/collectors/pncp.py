@@ -13,6 +13,10 @@ REQUEST_HEADERS = {
 }
 
 
+def _is_edital_title(title):
+    return "edital" in (title or "").strip().lower()
+
+
 def _parse_pncp_publication_datetime(value):
     if not value:
         return None
@@ -50,15 +54,16 @@ def scrape_pncp(page=1, page_size=20):
     seen_links = set()
 
     for item in items:
+        title = (item.get("title") or "Edital PNCP").strip()
         raw_link = item.get("item_url", "")
         link = urljoin(SOURCE_URL, raw_link)
 
-        if not link or link in seen_links:
+        if not link or link in seen_links or not _is_edital_title(title):
             continue
 
         opportunities.append(
             {
-                "title": (item.get("title") or "Edital PNCP").strip(),
+                "title": title,
                 "description": item.get("description") or "",
                 "link": link,
                 "deadline": item.get("data_fim_vigencia")
