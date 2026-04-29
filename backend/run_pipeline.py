@@ -1,21 +1,28 @@
+from collectors.finep import scrape_finep
 from collectors.pncp import scrape_pncp
 from collectors.prosas import scrape_prosas
 from core.database import SessionLocal
 from models.opportunity import Opportunity
 from models.source import Source
+from processing.finep import process_finep_opportunities
 from processing.pncp import process_pncp_opportunities
 from processing.prosas import process_prosas_opportunities
 
 
 def collect():
-    return scrape_prosas() + scrape_pncp()
+    return scrape_prosas() + scrape_pncp() + scrape_finep()
 
 
 def process(items):
     prosas_items = [item for item in items if item.get("source_name") == "Prosas"]
     pncp_items = [item for item in items if item.get("source_name") == "PNCP"]
+    finep_items = [item for item in items if item.get("source_name") == "Finep"]
 
-    return process_prosas_opportunities(prosas_items) + process_pncp_opportunities(pncp_items)
+    return (
+        process_prosas_opportunities(prosas_items)
+        + process_pncp_opportunities(pncp_items)
+        + process_finep_opportunities(finep_items)
+    )
 
 
 def analyze(items):
