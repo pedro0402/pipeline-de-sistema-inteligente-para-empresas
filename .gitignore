@@ -4,3 +4,4 @@ __pycache__
 source/
 backend/.agents/
 backend/skills-lock.json
+.vscode/
