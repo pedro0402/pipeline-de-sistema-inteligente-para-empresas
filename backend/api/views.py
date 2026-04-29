@@ -1,5 +1,6 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
+from rest_framework import status
 
 from core.database import SessionLocal
 from models.opportunity import Opportunity
@@ -129,5 +130,32 @@ def top_opportunities(request):
             data.append(_serialize_opportunity(opp, source=source, analysis=analysis))
 
         return Response({"count": len(data), "results": data})
+    finally:
+        session.close()
+
+@api_view(["GET"])
+def opportunity_detail(request, pk):
+    """
+    GET /opportunities/{id}
+    Retorna 404 se não encontrada.
+    """
+    session = SessionLocal()
+    try:
+        opp = session.query(Opportunity).filter(Opportunity.id == pk).first()
+
+        if opp is None:
+            return Response(
+                {"detail": "Oportunidade não encontrada."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        source = session.query(Source).filter(Source.id == opp.source_id).first()
+        analysis = (
+            session.query(OpportunityAnalysis)
+            .filter(OpportunityAnalysis.opportunity_id == opp.id)
+            .first()
+        )
+
+        return Response(_serialize_opportunity(opp, source=source, analysis=analysis))
     finally:
         session.close()
