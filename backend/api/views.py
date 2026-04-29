@@ -38,6 +38,8 @@ def _serialize_opportunity(opp, source=None, analysis=None):
 @api_view(["GET"])
 def list_opportunities(request):
     """
+    GET /opportunities
+
     Query params (Filtros opcionais):
         search       : filtra por título ou descrição (case-insensitive)
         organization : filtra por organização
@@ -94,5 +96,38 @@ def list_opportunities(request):
             data.append(_serialize_opportunity(opp, source=source, analysis=analysis))
 
         return Response({"count": total, "page": page, "page_size": page_size, "results": data})
+    finally:
+        session.close()
+
+@api_view(["GET"])
+def top_opportunities(request):
+    """
+    GET /opportunities/top
+
+    Query params:
+        limit : quantidade de resultados (default 10, max 50)
+    """
+    session = SessionLocal()
+    try:
+        try:
+            limit = min(50, max(1, int(request.query_params.get("limit", 10))))
+        except ValueError:
+            limit = 10
+
+        rows = (
+            session.query(Opportunity, OpportunityAnalysis)
+            .join(OpportunityAnalysis, OpportunityAnalysis.opportunity_id == Opportunity.id)
+            .filter(OpportunityAnalysis.relevance_score.isnot(None))
+            .order_by(OpportunityAnalysis.relevance_score.desc())
+            .limit(limit)
+            .all()
+        )
+
+        data = []
+        for opp, analysis in rows:
+            source = session.query(Source).filter(Source.id == opp.source_id).first()
+            data.append(_serialize_opportunity(opp, source=source, analysis=analysis))
+
+        return Response({"count": len(data), "results": data})
     finally:
         session.close()

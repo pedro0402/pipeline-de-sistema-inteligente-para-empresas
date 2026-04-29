@@ -29,9 +29,6 @@ def make_source(**kwargs):
 
 factory = APIRequestFactory()
 
-
-#Testes de oportunidades
-
 class TestListOpportunitiesStatus:
     @patch("api.views.SessionLocal")
     def test_retorna_200(self, mock_session_cls):
