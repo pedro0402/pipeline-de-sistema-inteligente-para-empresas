@@ -23,7 +23,7 @@ def test_scrape_pncp_collects_opportunities(monkeypatch):
     payload = {
         "items": [
             {
-                "title": "Aviso de Contratação Direta nº 00001/2021",
+                "title": "Edital de Chamamento nº 00001/2021",
                 "description": "Contratação de serviço especializado",
                 "item_url": "/compras/00394502000144/2021/1",
                 "data_fim_vigencia": "2026-06-30T17:00",
@@ -44,7 +44,7 @@ def test_scrape_pncp_collects_opportunities(monkeypatch):
 
     assert len(opportunities) == 1
     opportunity = opportunities[0]
-    assert opportunity["title"] == "Aviso de Contratação Direta nº 00001/2021"
+    assert opportunity["title"] == "Edital de Chamamento nº 00001/2021"
     assert opportunity["description"] == "Contratação de serviço especializado"
     assert opportunity["link"] == "https://pncp.gov.br/compras/00394502000144/2021/1"
     assert opportunity["deadline"] == "2026-06-30T17:00"
@@ -84,3 +84,38 @@ def test_scrape_pncp_orders_items_by_publication_date_newest_first(monkeypatch):
     opportunities = pncp.scrape_pncp()
 
     assert [o["title"] for o in opportunities] == ["Edital recente", "Edital antigo"]
+
+
+def test_scrape_pncp_ignores_non_edital_titles(monkeypatch):
+    if "collectors.pncp" in sys.modules:
+        del sys.modules["collectors.pncp"]
+
+    pncp = importlib.import_module("collectors.pncp")
+    payload = {
+        "items": [
+            {
+                "title": "Ato que autoriza a Contratação Direta nº 77/2026",
+                "description": "",
+                "item_url": "/compras/333/2026/1",
+                "data_fim_vigencia": "2026-06-30T17:00",
+                "data_publicacao_pncp": "2026-04-28T19:10:00",
+            },
+            {
+                "title": "Edital de seleção nº 12/2026",
+                "description": "",
+                "item_url": "/compras/444/2026/1",
+                "data_fim_vigencia": "2026-07-01T17:00",
+                "data_publicacao_pncp": "2026-04-28T19:11:00",
+            },
+        ]
+    }
+
+    def fake_get(url, params=None, headers=None, timeout=20):
+        return FakeResponse(payload)
+
+    monkeypatch.setattr(pncp.requests, "get", fake_get)
+
+    opportunities = pncp.scrape_pncp()
+
+    assert len(opportunities) == 1
+    assert opportunities[0]["title"] == "Edital de seleção nº 12/2026"
