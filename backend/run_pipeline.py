@@ -3,10 +3,12 @@ from collectors.pncp import scrape_pncp
 from collectors.prosas import scrape_prosas
 from core.database import SessionLocal
 from models.opportunity import Opportunity
+from models.opportunity_analysis import OpportunityAnalysis
 from models.source import Source
 from processing.finep import process_finep_opportunities
 from processing.pncp import process_pncp_opportunities
 from processing.prosas import process_prosas_opportunities
+from processing.text_processor import build_processed_text
 
 
 def collect():
@@ -26,11 +28,18 @@ def process(items):
 
 
 def analyze(items):
+    for item in items:
+        item["processed_text"] = build_processed_text(
+            title=item.get("title"),
+            description=item.get("description"),
+            organization=item.get("source_name"),
+            deadline=str(item["deadline"]) if item.get("deadline") else None,
+        )
     return items
 
 
 def report(items):
-    print(f"oportunidades processadas: {len(items)}")
+    print(f"oportunidades processadas: {len(items)}") 
 
 
 def save_to_db(items):
@@ -63,17 +72,25 @@ def save_to_db(items):
             if exists is not None:
                 continue
 
+            opportunity = Opportunity(
+                source_id=source.id,
+                title=item["title"],
+                description=item.get("description"),
+                organization=source_name,
+                deadline=item.get("deadline"),
+                link=link,
+                location=item.get("location"),
+            )
+            session.add(opportunity)
+            session.flush()
+
             session.add(
-                Opportunity(
-                    source_id=source.id,
-                    title=item["title"],
-                    description=item.get("description"),
-                    organization=source_name,
-                    deadline=item.get("deadline"),
-                    link=link,
-                    location=item.get("location"),
+                OpportunityAnalysis(
+                    opportunity_id=opportunity.id,
+                    processed_text=item.get("processed_text"),
                 )
             )
+
             seen_links.add(link)
 
         session.commit()
