@@ -11,6 +11,7 @@ REQUEST_HEADERS = {
     "User-Agent": "Mozilla/5.0",
     "Accept-Language": "pt-BR,pt;q=0.9",
 }
+PAGE_SIZE = 50
 
 
 def _is_edital_title(title):
@@ -27,51 +28,62 @@ def _parse_pncp_publication_datetime(value):
         return None
 
 
-def scrape_pncp(page=1, page_size=20):
+def _fetch_page(page):
     response = requests.get(
         SEARCH_URL,
         params={
             "tipos_documento": "edital",
             "status": "aberta",
             "pagina": page,
-            "tam_pagina": page_size,
+            "tam_pagina": PAGE_SIZE,
             "ordenacao": "data_publicacao_pncp_desc",
         },
         headers=REQUEST_HEADERS,
         timeout=20,
     )
+    if response.status_code == 400:
+        return None
     response.raise_for_status()
+    return response.json().get("items") or []
 
-    payload = response.json()
-    items = payload.get("items") or []
-    items = sorted(
-        items,
-        key=lambda it: _parse_pncp_publication_datetime(it.get("data_publicacao_pncp"))
-        or datetime.min,
-        reverse=True,
-    )
+
+def scrape_pncp():
     opportunities = []
     seen_links = set()
+    page = 1
 
-    for item in items:
-        title = (item.get("title") or "Edital PNCP").strip()
-        raw_link = item.get("item_url", "")
-        link = urljoin(SOURCE_URL, raw_link)
+    while True:
+        items = _fetch_page(page)
+        if items is None or not items:
+            break
 
-        if not link or link in seen_links or not _is_edital_title(title):
-            continue
-
-        opportunities.append(
-            {
-                "title": title,
-                "description": item.get("description") or "",
-                "link": link,
-                "deadline": item.get("data_fim_vigencia")
-                or item.get("data_encerramento_proposta"),
-                "source_name": SOURCE_NAME,
-                "source_url": SOURCE_URL,
-            }
+        items = sorted(
+            items,
+            key=lambda it: _parse_pncp_publication_datetime(it.get("data_publicacao_pncp")) or datetime.min,
+            reverse=True,
         )
-        seen_links.add(link)
 
+        for item in items:
+            title = (item.get("title") or "Edital PNCP").strip()
+            raw_link = item.get("item_url", "")
+            link = urljoin(SOURCE_URL, raw_link)
+
+            if not link or link in seen_links or not _is_edital_title(title):
+                continue
+
+            opportunities.append(
+                {
+                    "title": title,
+                    "description": item.get("description") or "",
+                    "link": link,
+                    "deadline": item.get("data_fim_vigencia") or item.get("data_encerramento_proposta"),
+                    "source_name": SOURCE_NAME,
+                    "source_url": SOURCE_URL,
+                }
+            )
+            seen_links.add(link)
+
+        page += 1
+
+    print(f"  [PNCP] {len(opportunities)} editais coletados ({page - 1} páginas)")
     return opportunities
