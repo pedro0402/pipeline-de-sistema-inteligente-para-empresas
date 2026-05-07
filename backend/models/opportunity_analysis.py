@@ -16,6 +16,7 @@ class OpportunityAnalysis(Base):
     summary = Column(Text)
     relevance_score = Column(Integer)
     recommended_action = Column(Text)
+    processed_text = Column(Text)
     analyzed_at = Column(DateTime, server_default=func.now())
 
     __table_args__ = (

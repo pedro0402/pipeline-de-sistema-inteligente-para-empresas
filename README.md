@@ -31,6 +31,11 @@ Pipeline em Python para coletar oportunidades, processar dados e persistir resul
 
 2. Criar e ativar ambiente virtual:
 
+	# No Windows:
+	python -m venv venv
+	venv\Scripts\activatepip install -r requirements.txt
+
+	# No Linux/Mac:
 	python3 -m venv venv
 	source venv/bin/activate
 
