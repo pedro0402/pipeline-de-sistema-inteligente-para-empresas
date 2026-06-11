@@ -30,7 +30,20 @@ def load_company(company_id):
 
 
 def collect():
-    items = scrape_prosas() + scrape_pncp() + scrape_finep()
+    collectors = [
+        ("Prosas", scrape_prosas),
+        ("PNCP", scrape_pncp),
+        ("Finep", scrape_finep),
+    ]
+
+    items = []
+    for name, collector in collectors:
+        try:
+            items += collector()
+        except Exception as error:
+            # Falha em uma fonte não deve derrubar o pipeline inteiro.
+            print(f"  [{name}] falha na coleta, fonte ignorada: {error}")
+
     print(f"  total coletado: {len(items)} editais")
     return items
 
