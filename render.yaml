@@ -1,0 +1,41 @@
+# Blueprint do Render (https://render.com/docs/blueprint-spec)
+#
+# Serviços:
+#   - pipeline-api    : API REST Django (Web Service)
+#   - pipeline-coleta : pipeline batch de coleta de editais (Cron Job)
+#
+# O banco Postgres fica no Supabase; configure DATABASE_URL no painel do Render
+# (variáveis com sync: false precisam ser preenchidas manualmente).
+
+services:
+  - type: web
+    name: pipeline-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:application --bind 0.0.0.0:$PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "false"
+      - key: ALLOWED_HOSTS
+        value: pipeline-api.onrender.com
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+
+  - type: cron
+    name: pipeline-coleta
+    runtime: python
+    rootDir: backend
+    plan: free
+    schedule: "0 */6 * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python run_pipeline.py --all
+    envVars:
+      - key: DATABASE_URL
+        sync: false
