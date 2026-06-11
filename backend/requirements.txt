@@ -7,4 +7,5 @@ pytest==7.4.3
 requests==2.31.0
 beautifulsoup4==4.13.4
 djangorestframework==3.17.1
+django-cors-headers==4.9.0
 google-genai==1.74.0
