@@ -29,6 +29,17 @@ def load_company(company_id):
         session.close()
 
 
+def load_all_companies():
+    session = SessionLocal()
+    try:
+        profiles = session.query(CompanyProfile).order_by(CompanyProfile.id).all()
+        for profile in profiles:
+            session.expunge(profile)
+        return profiles
+    finally:
+        session.close()
+
+
 def collect():
     collectors = [
         ("Prosas", scrape_prosas),
@@ -161,10 +172,33 @@ def save_to_db(items):
         session.close()
 
 
-def main(company_id):
-    print(f"carregando empresa id={company_id}")
-    profile = load_company(company_id)
-    print(f"  empresa: {profile.name}")
+def run_for_profile(profile, items):
+    print(f"\n===== empresa: {profile.name} (id={profile.id}) =====")
+
+    # Cópia rasa de cada item para que o score de uma empresa não contamine a outra.
+    items = [dict(item) for item in items]
+
+    print("[4/5] avaliando relevância...")
+    items = score(items, profile)
+
+    print("[5/5] filtrando e salvando...")
+    items = filter_relevant(items)
+    save_to_db(items)
+
+    report(items)
+    return items
+
+
+def main(company_id=None):
+    if company_id is not None:
+        print(f"carregando empresa id={company_id}")
+        profiles = [load_company(company_id)]
+    else:
+        print("carregando todas as empresas cadastradas")
+        profiles = load_all_companies()
+        if not profiles:
+            raise ValueError("Nenhuma empresa cadastrada em company_profile.")
+        print(f"  {len(profiles)} empresa(s): " + ", ".join(p.name for p in profiles))
 
     print("\n[1/5] coletando editais...")
     items = collect()
@@ -175,24 +209,25 @@ def main(company_id):
     print("\n[3/5] preparando textos...")
     items = analyze(items)
 
-    print("\n[4/5] avaliando relevância...")
-    items = score(items, profile)
+    results = {}
+    for profile in profiles:
+        results[profile.id] = run_for_profile(profile, items)
 
-    print("\n[5/5] filtrando e salvando...")
-    items = filter_relevant(items)
-    save_to_db(items)
-
-    report(items)
-    return items
+    return results
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Pipeline de editais relevantes por empresa.")
-    parser.add_argument(
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
         "--company-id",
         type=int,
-        required=True,
         help="ID da empresa em company_profile (ex: --company-id 1)",
     )
+    group.add_argument(
+        "--all",
+        action="store_true",
+        help="Executa o pipeline para todas as empresas cadastradas",
+    )
     args = parser.parse_args()
-    main(args.company_id)
+    main(None if args.all else args.company_id)
