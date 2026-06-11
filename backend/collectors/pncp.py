@@ -1,3 +1,4 @@
+import time
 from datetime import datetime
 from urllib.parse import urljoin
 
@@ -12,6 +13,11 @@ REQUEST_HEADERS = {
     "Accept-Language": "pt-BR,pt;q=0.9",
 }
 PAGE_SIZE = 50
+# A busca aberta do PNCP retorna milhões de resultados; como a ordenação é por
+# data de publicação decrescente, coletamos apenas as páginas mais recentes.
+MAX_PAGES = 5
+MAX_RETRIES = 5
+RETRY_BACKOFF_SECONDS = 1.5
 
 
 def _is_edital_title(title):
@@ -29,22 +35,35 @@ def _parse_pncp_publication_datetime(value):
 
 
 def _fetch_page(page):
-    response = requests.get(
-        SEARCH_URL,
-        params={
-            "tipos_documento": "edital",
-            "status": "aberta",
-            "pagina": page,
-            "tam_pagina": PAGE_SIZE,
-            "ordenacao": "data_publicacao_pncp_desc",
-        },
-        headers=REQUEST_HEADERS,
-        timeout=20,
-    )
-    if response.status_code == 400:
-        return None
-    response.raise_for_status()
-    return response.json().get("items") or []
+    # A API do PNCP derruba conexões de forma intermitente (WAF/rate limit),
+    # então cada página é tentada com retry e backoff exponencial.
+    last_error = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = requests.get(
+                SEARCH_URL,
+                params={
+                    "tipos_documento": "edital",
+                    "status": "aberta",
+                    "pagina": page,
+                    "tam_pagina": PAGE_SIZE,
+                    "ordenacao": "data_publicacao_pncp_desc",
+                },
+                headers=REQUEST_HEADERS,
+                timeout=20,
+            )
+            if response.status_code == 400:
+                return None
+            response.raise_for_status()
+            return response.json().get("items") or []
+        except (requests.ConnectionError, requests.Timeout, requests.HTTPError) as error:
+            if isinstance(error, requests.HTTPError) and error.response is not None and error.response.status_code < 500:
+                raise
+            last_error = error
+            if attempt < MAX_RETRIES:
+                time.sleep(RETRY_BACKOFF_SECONDS * (2 ** (attempt - 1)))
+
+    raise last_error
 
 
 def scrape_pncp():
@@ -52,8 +71,14 @@ def scrape_pncp():
     seen_links = set()
     page = 1
 
-    while True:
-        items = _fetch_page(page)
+    while page <= MAX_PAGES:
+        try:
+            items = _fetch_page(page)
+        except Exception as error:
+            # Mantém o que já foi coletado em vez de perder tudo.
+            print(f"  [PNCP] página {page} falhou após {MAX_RETRIES} tentativas: {error}")
+            break
+
         if items is None or not items:
             break
 
