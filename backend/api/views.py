@@ -37,6 +37,16 @@ def _serialize_opportunity(opp, source=None, analysis=None):
 
 
 @api_view(["GET"])
+def health(request):
+    """
+    GET /health
+
+    Health check para monitoramento do serviço (ex.: Render).
+    """
+    return Response({"status": "ok"})
+
+
+@api_view(["GET"])
 def list_opportunities(request):
     """
     GET /opportunities
