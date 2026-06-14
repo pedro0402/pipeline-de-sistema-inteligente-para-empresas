@@ -307,3 +307,52 @@ def login(request):
 
     finally:
         session.close()
+
+@api_view(["GET", "PUT"])
+def interests_view(request):
+    session = SessionLocal()
+
+    try:
+        if request.method == "GET":
+            user_id = request.query_params.get("user_id")
+
+            user = session.query(User).filter(User.id == user_id).first()
+
+            if not user:
+                return Response({"error": "Usuário não encontrado"}, status=404)
+
+            company = session.query(CompanyProfile).filter(
+                CompanyProfile.id == user.company_id
+            ).first()
+
+            return Response({
+                "interests": json.loads(company.interests or "[]")
+            })
+
+        # -------------------------
+        # PUT (SALVAR INTERESSES)
+        # -------------------------
+        data = json.loads(request.body)
+
+        interests = data.get("interests", [])
+        user_id = data.get("user_id")
+
+        user = session.query(User).filter(User.id == user_id).first()
+
+        if not user:
+            return Response({"error": "Usuário não encontrado"}, status=404)
+
+        company = session.query(CompanyProfile).filter(
+            CompanyProfile.id == user.company_id
+        ).first()
+
+        company.interests = json.dumps(interests)
+        session.commit()
+
+        return Response({
+            "message": "Atualizado com sucesso",
+            "interests": interests
+        })
+
+    finally:
+        session.close()

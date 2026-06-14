@@ -1,6 +1,6 @@
 from django.urls import path
 from api import views
-from api.views import health, list_opportunities, opportunity_detail, top_opportunities
+from api.views import health, list_opportunities, opportunity_detail, top_opportunities, interests_view
 
 urlpatterns = [
     path("health", health),
@@ -9,4 +9,5 @@ urlpatterns = [
     path("opportunities/<int:pk>", opportunity_detail),
     path("register", views.register),
     path("login", views.login),
+    path("company/interests", interests_view),
 ]
