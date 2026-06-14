@@ -8,4 +8,5 @@ urlpatterns = [
     path("opportunities/top", top_opportunities),
     path("opportunities/<int:pk>", opportunity_detail),
     path("register", views.register),
+    path("login", views.login),
 ]

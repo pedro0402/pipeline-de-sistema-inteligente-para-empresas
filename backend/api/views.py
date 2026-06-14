@@ -7,6 +7,7 @@ from models.company_profile import CompanyProfile
 from models.user import User
 
 from werkzeug.security import generate_password_hash
+from werkzeug.security import check_password_hash
 
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -245,5 +246,64 @@ def register(request):
             {"error": "Erro ao processar registro.", "details": str(e)},
             status=500
         )
+    finally:
+        session.close()
+
+@csrf_exempt
+def login(request):
+    if request.method != "POST":
+        return JsonResponse(
+            {"error": "Método não permitido."},
+            status=405
+        )
+
+    session = SessionLocal()
+
+    try:
+        data = json.loads(request.body)
+
+        email = data.get("email")
+        password = data.get("password")
+
+        user = (
+            session.query(User)
+            .filter(User.email == email)
+            .first()
+        )
+
+        if not user:
+            return JsonResponse(
+                {"error": "Usuário não encontrado."},
+                status=401
+            )
+
+        if not check_password_hash(
+            user.password_hash,
+            password
+        ):
+            return JsonResponse(
+                {"error": "Senha inválida."},
+                status=401
+            )
+
+        return JsonResponse({
+            "message": "Login realizado com sucesso.",
+            "user": {
+                "id": user.id,
+                "name": user.name,
+                "email": user.email,
+                "company_id": user.company_id
+            }
+        })
+
+    except Exception as e:
+        return JsonResponse(
+            {
+                "error": "Erro ao realizar login.",
+                "details": str(e)
+            },
+            status=500
+        )
+
     finally:
         session.close()
