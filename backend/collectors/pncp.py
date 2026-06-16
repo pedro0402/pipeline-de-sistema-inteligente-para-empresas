@@ -4,6 +4,9 @@ from urllib.parse import urljoin
 
 import requests
 
+from processing.opportunity_filters import is_active_deadline
+from processing.prosas import parse_deadline
+
 
 SOURCE_NAME = "PNCP"
 SOURCE_URL = "https://pncp.gov.br"
@@ -94,6 +97,10 @@ def scrape_pncp():
             link = urljoin(SOURCE_URL, raw_link)
 
             if not link or link in seen_links or not _is_edital_title(title):
+                continue
+
+            deadline_raw = item.get("data_fim_vigencia") or item.get("data_encerramento_proposta")
+            if not is_active_deadline(parse_deadline(deadline_raw)):
                 continue
 
             opportunities.append(

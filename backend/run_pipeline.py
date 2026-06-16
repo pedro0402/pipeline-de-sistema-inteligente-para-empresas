@@ -10,6 +10,7 @@ from models.opportunity import Opportunity
 from models.opportunity_analysis import OpportunityAnalysis
 from models.source import Source
 from processing.finep import process_finep_opportunities
+from processing.opportunity_filters import filter_active_opportunities
 from processing.pncp import process_pncp_opportunities
 from processing.prosas import process_prosas_opportunities
 from processing.text_processor import build_processed_text
@@ -70,8 +71,12 @@ def process(items):
         + process_pncp_opportunities(pncp_items)
         + process_finep_opportunities(finep_items)
     )
-    print(f"  {len(result)}/{total} editais processados")
-    return result
+    active = filter_active_opportunities(result)
+    expired_count = len(result) - len(active)
+    if expired_count:
+        print(f"  {expired_count} edital(is) expirado(s) removido(s)")
+    print(f"  {len(active)}/{total} editais processados")
+    return active
 
 
 def analyze(items):

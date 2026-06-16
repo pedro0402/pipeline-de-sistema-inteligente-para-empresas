@@ -1,6 +1,9 @@
 import json
+from datetime import date
+
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from sqlalchemy import or_
 
 from core.database import SessionLocal
 from models.company_profile import CompanyProfile
@@ -17,6 +20,13 @@ from core.database import SessionLocal
 from models.opportunity import Opportunity
 from models.opportunity_analysis import OpportunityAnalysis
 from models.source import Source
+
+
+def _active_opportunities_filter():
+    return or_(
+        Opportunity.deadline.is_(None),
+        Opportunity.deadline >= date.today(),
+    )
 
 
 def _serialize_opportunity(opp, source=None, analysis=None):
@@ -71,7 +81,7 @@ def list_opportunities(request):
     """
     session = SessionLocal()
     try:
-        query = session.query(Opportunity)
+        query = session.query(Opportunity).filter(_active_opportunities_filter())
 
         search = request.query_params.get("search")
         if search:
@@ -139,6 +149,7 @@ def top_opportunities(request):
         rows = (
             session.query(Opportunity, OpportunityAnalysis)
             .join(OpportunityAnalysis, OpportunityAnalysis.opportunity_id == Opportunity.id)
+            .filter(_active_opportunities_filter())
             .filter(OpportunityAnalysis.relevance_score.isnot(None))
             .order_by(OpportunityAnalysis.relevance_score.desc())
             .limit(limit)
@@ -162,7 +173,12 @@ def opportunity_detail(request, pk):
     """
     session = SessionLocal()
     try:
-        opp = session.query(Opportunity).filter(Opportunity.id == pk).first()
+        opp = (
+            session.query(Opportunity)
+            .filter(Opportunity.id == pk)
+            .filter(_active_opportunities_filter())
+            .first()
+        )
 
         if opp is None:
             return Response(
@@ -418,6 +434,7 @@ def run_pipeline_and_save(request):
                 OpportunityAnalysis,
                 OpportunityAnalysis.opportunity_id == Opportunity.id
             )
+            .filter(_active_opportunities_filter())
             .filter(OpportunityAnalysis.relevance_score.isnot(None))
             .filter(OpportunityAnalysis.relevance_score >= 6)
         )

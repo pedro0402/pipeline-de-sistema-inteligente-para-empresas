@@ -3,6 +3,9 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
+from processing.opportunity_filters import is_active_deadline
+from processing.prosas import parse_deadline
+
 
 SOURCE_NAME = "Finep"
 SOURCE_URL = "https://www.finep.gov.br"
@@ -49,6 +52,9 @@ def _parse_items(soup, seen_links):
 
         prazo_span = item.select_one("div.prazo span")
         prazo_value = prazo_span.get_text(strip=True) if prazo_span else ""
+
+        if not is_active_deadline(parse_deadline(prazo_value)):
+            continue
 
         opportunities.append(
             {
