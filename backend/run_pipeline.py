@@ -1,11 +1,13 @@
 import argparse
+from types import SimpleNamespace
+
+from sqlalchemy import text
 
 from collectors.finep import scrape_finep
 from collectors.pncp import scrape_pncp
 from collectors.prosas import scrape_prosas
 from core.database import SessionLocal
 from intelligence.scorer import score_opportunity
-from models.company_profile import CompanyProfile
 from models.opportunity import Opportunity
 from models.opportunity_analysis import OpportunityAnalysis
 from models.source import Source
@@ -17,15 +19,26 @@ from processing.text_processor import build_processed_text
 
 RELEVANCE_THRESHOLD = 6
 
+_COMPANY_PROFILE_COLUMNS = (
+    "SELECT id, name, sector, size, location, interests "
+    "FROM company_profile"
+)
+
+
+def _row_to_profile(row):
+    return SimpleNamespace(**dict(row))
+
 
 def load_company(company_id):
     session = SessionLocal()
     try:
-        profile = session.query(CompanyProfile).filter(CompanyProfile.id == company_id).first()
-        if profile is None:
+        row = session.execute(
+            text(f"{_COMPANY_PROFILE_COLUMNS} WHERE id = :id"),
+            {"id": company_id},
+        ).mappings().first()
+        if row is None:
             raise ValueError(f"Empresa com id={company_id} não encontrada.")
-        session.expunge(profile)
-        return profile
+        return _row_to_profile(row)
     finally:
         session.close()
 
@@ -33,10 +46,10 @@ def load_company(company_id):
 def load_all_companies():
     session = SessionLocal()
     try:
-        profiles = session.query(CompanyProfile).order_by(CompanyProfile.id).all()
-        for profile in profiles:
-            session.expunge(profile)
-        return profiles
+        rows = session.execute(
+            text(f"{_COMPANY_PROFILE_COLUMNS} ORDER BY id")
+        ).mappings().all()
+        return [_row_to_profile(row) for row in rows]
     finally:
         session.close()
 
