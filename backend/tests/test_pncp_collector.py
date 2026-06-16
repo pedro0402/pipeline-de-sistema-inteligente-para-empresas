@@ -70,7 +70,7 @@ def test_scrape_pncp_orders_items_by_publication_date_newest_first(monkeypatch):
                 "title": "Edital recente",
                 "description": "",
                 "item_url": "/compras/222/2026/1",
-                "data_fim_vigencia": "2026-05-29T17:00",
+                "data_fim_vigencia": "2027-05-29T17:00",
                 "data_publicacao_pncp": "2026-04-28T19:00:00",
             },
         ]
@@ -83,7 +83,7 @@ def test_scrape_pncp_orders_items_by_publication_date_newest_first(monkeypatch):
 
     opportunities = pncp.scrape_pncp()
 
-    assert [o["title"] for o in opportunities] == ["Edital recente", "Edital antigo"]
+    assert [o["title"] for o in opportunities] == ["Edital recente"]
 
 
 def test_scrape_pncp_ignores_non_edital_titles(monkeypatch):

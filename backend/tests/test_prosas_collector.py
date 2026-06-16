@@ -8,7 +8,7 @@ HTML_FIXTURE = """
     <article class="opportunity">
       <a class="opportunity-link" href="/oportunidade/1">Edital Prosas 1</a>
       <div class="opportunity-description"><p>Financiamento para projetos de inovacao.</p></div>
-      <span class="opportunity-deadline">2026-05-20</span>
+      <span class="opportunity-deadline">2027-05-20</span>
     </article>
   </body>
 </html>
@@ -51,7 +51,7 @@ def test_scrape_prosas_collects_raw_opportunities(monkeypatch):
     monkeypatch.setattr(
         prosas.requests,
         "get",
-        lambda url, headers=None, timeout=20: FakeResponse(HTML_FIXTURE),
+        lambda url, headers=None, timeout=20, params=None: FakeResponse(HTML_FIXTURE),
     )
 
     opportunities = prosas.scrape_prosas()
@@ -61,7 +61,7 @@ def test_scrape_prosas_collects_raw_opportunities(monkeypatch):
     assert opportunity["title"] == "Edital Prosas 1"
     assert opportunity["description"] == "<p>Financiamento para projetos de inovacao.</p>"
     assert opportunity["link"] == "https://prosas.com.br/oportunidade/1"
-    assert opportunity["deadline"] == "2026-05-20"
+    assert opportunity["deadline"] == "2027-05-20"
     assert opportunity["source_name"] == "Prosas"
     assert opportunity["source_url"] == "https://prosas.com.br"
 
@@ -101,7 +101,7 @@ def test_scrape_prosas_falls_back_to_central_api_when_page_has_no_links(monkeypa
                 "attributes": {
                     "nome": "Edital de teste",
                     "descricao": "<p>Descricao</p>",
-                    "data_limite_inscricao_sem_rascunho": "2026-05-30",
+                    "data_limite_inscricao_sem_rascunho": "2027-05-30",
                 },
             }
         ]
@@ -125,4 +125,4 @@ def test_scrape_prosas_falls_back_to_central_api_when_page_has_no_links(monkeypa
     assert opportunity["title"] == "Edital de teste"
     assert opportunity["description"] == "<p>Descricao</p>"
     assert opportunity["link"] == "https://prosas.com.br/editais/123"
-    assert opportunity["deadline"] == "2026-05-30"
+    assert opportunity["deadline"] == "2027-05-30"

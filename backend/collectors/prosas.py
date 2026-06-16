@@ -3,6 +3,9 @@ from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
+from processing.opportunity_filters import is_active_deadline
+from processing.prosas import parse_deadline
+
 
 SOURCE_NAME = "Prosas"
 SOURCE_URL = "https://prosas.com.br"
@@ -39,12 +42,16 @@ def scrape_prosas():
         if not link or link in seen_links:
             continue
 
+        deadline_value = deadline_tag.get_text(strip=True) if deadline_tag else None
+        if not is_active_deadline(parse_deadline(deadline_value)):
+            continue
+
         opportunities.append(
             {
                 "title": link_tag.get_text(strip=True),
                 "description": description_tag.decode_contents().strip() if description_tag else "",
                 "link": link,
-                "deadline": deadline_tag.get_text(strip=True) if deadline_tag else None,
+                "deadline": deadline_value,
                 "source_name": SOURCE_NAME,
                 "source_url": SOURCE_URL,
             }
@@ -134,12 +141,16 @@ def _scrape_prosas_api():
             if not link or link in seen_links:
                 continue
 
+            deadline_raw = attributes.get("data_limite_inscricao_sem_rascunho")
+            if not is_active_deadline(parse_deadline(deadline_raw)):
+                continue
+
             opportunities.append(
                 {
                     "title": (attributes.get("nome") or "Edital Prosas").strip(),
                     "description": attributes.get("descricao") or "",
                     "link": link,
-                    "deadline": attributes.get("data_limite_inscricao_sem_rascunho"),
+                    "deadline": deadline_raw,
                     "source_name": SOURCE_NAME,
                     "source_url": SOURCE_URL,
                 }

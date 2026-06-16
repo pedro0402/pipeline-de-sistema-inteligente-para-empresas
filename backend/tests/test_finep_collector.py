@@ -48,10 +48,10 @@ def test_scrape_finep_collects_only_open_calls(monkeypatch):
 
     finep = importlib.import_module("collectors.finep")
 
-    def fake_get(url, headers=None, timeout=20):
+    def fake_get(url, headers=None, timeout=20, params=None):
         assert (
             url
-            == "https://www.finep.gov.br/chamadas-publicas?situacao=aberta&tFonte=2"
+            == "https://www.finep.gov.br/chamadas-publicas"
         )
         return FakeResponse(HTML_FIXTURE)
 
@@ -81,7 +81,7 @@ def test_scrape_finep_collects_from_filtered_layout_without_sections(monkeypatch
             <h3>
               <a href="/chamadas-publicas/chamadapublica/784">FIP Startup Inteligência Artificial</a>
             </h3>
-            <div class="prazo div"><strong>Prazo para envio de propostas até: </strong><span>28/05/2026</span></div>
+            <div class="prazo div"><strong>Prazo para envio de propostas até: </strong><span>28/05/2027</span></div>
           </div>
           <div class="item">
             <h3><a href="/institucional">Link institucional</a></h3>
@@ -94,7 +94,7 @@ def test_scrape_finep_collects_from_filtered_layout_without_sections(monkeypatch
     monkeypatch.setattr(
         finep.requests,
         "get",
-        lambda url, headers=None, timeout=20: FakeResponse(filtered_html),
+        lambda url, headers=None, timeout=20, params=None: FakeResponse(filtered_html),
     )
 
     opportunities = finep.scrape_finep()
@@ -102,4 +102,4 @@ def test_scrape_finep_collects_from_filtered_layout_without_sections(monkeypatch
     assert len(opportunities) == 1
     assert opportunities[0]["title"] == "FIP Startup Inteligência Artificial"
     assert opportunities[0]["link"] == "https://www.finep.gov.br/chamadas-publicas/chamadapublica/784"
-    assert opportunities[0]["deadline"] == "28/05/2026"
+    assert opportunities[0]["deadline"] == "28/05/2027"
