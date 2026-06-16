@@ -224,14 +224,9 @@ def register(request):
         
         company = CompanyProfile(
             name=data.get("company_name"),
-            cnpj=data.get("cnpj"),
             sector=data.get("sector"),
             size=data.get("size"),
             location=data.get("location"),
-            website=data.get("website"),
-            phone=data.get("phone"),
-            annual_revenue=data.get("annual_revenue"),
-            discovery_source=data.get("discovery_source"),
         )
 
         session.add(company)
