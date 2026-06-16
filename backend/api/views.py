@@ -356,3 +356,111 @@ def interests_view(request):
 
     finally:
         session.close()
+
+@api_view(["POST"])
+def run_pipeline_and_save(request):
+    """
+    POST /pipeline/run
+
+    Executa a pipeline para a empresa do usuário logado,
+    salva as oportunidades no banco e retorna os resultados.
+    """
+
+    user_id = request.data.get("user_id")
+    search = (request.data.get("search") or "").strip()
+
+    if not user_id:
+        return Response(
+            {"error": "user_id é obrigatório."},
+            status=400
+        )
+
+    session = SessionLocal()
+
+    try:
+        user = (
+            session.query(User)
+            .filter(User.id == user_id)
+            .first()
+        )
+
+        if not user:
+            return Response(
+                {"error": "Usuário não encontrado."},
+                status=404
+            )
+
+        company_id = user.company_id
+
+    finally:
+        session.close()
+
+    try:
+        from run_pipeline import main as run_pipeline_main
+
+        run_pipeline_main(company_id)
+
+    except Exception as error:
+        return Response(
+            {
+                "error": "Erro ao executar pipeline.",
+                "details": str(error)
+            },
+            status=500
+        )
+
+    session = SessionLocal()
+
+    try:
+        query = (
+            session.query(Opportunity, OpportunityAnalysis)
+            .join(
+                OpportunityAnalysis,
+                OpportunityAnalysis.opportunity_id == Opportunity.id
+            )
+            .filter(OpportunityAnalysis.relevance_score.isnot(None))
+            .filter(OpportunityAnalysis.relevance_score >= 6)
+        )
+
+        if search:
+            pattern = f"%{search}%"
+
+            query = query.filter(
+                Opportunity.title.ilike(pattern)
+                | Opportunity.description.ilike(pattern)
+                | Opportunity.organization.ilike(pattern)
+                | Opportunity.location.ilike(pattern)
+            )
+
+        rows = (
+            query
+            .order_by(OpportunityAnalysis.relevance_score.desc())
+            .limit(100)
+            .all()
+        )
+
+        data = []
+
+        for opp, analysis in rows:
+            source = (
+                session.query(Source)
+                .filter(Source.id == opp.source_id)
+                .first()
+            )
+
+            data.append(
+                _serialize_opportunity(
+                    opp,
+                    source=source,
+                    analysis=analysis
+                )
+            )
+
+        return Response({
+            "message": "Pipeline executado e oportunidades salvas no banco.",
+            "count": len(data),
+            "results": data
+        })
+
+    finally:
+        session.close()
