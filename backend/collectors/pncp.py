@@ -1,10 +1,10 @@
 import time
 from datetime import datetime
-from urllib.parse import urljoin
 
 import requests
 
 from processing.opportunity_filters import is_active_deadline
+from processing.pncp import normalize_pncp_link
 from processing.prosas import parse_deadline
 
 
@@ -94,7 +94,7 @@ def scrape_pncp():
         for item in items:
             title = (item.get("title") or "Edital PNCP").strip()
             raw_link = item.get("item_url", "")
-            link = urljoin(SOURCE_URL, raw_link)
+            link = normalize_pncp_link(raw_link, SOURCE_URL)
 
             if not link or link in seen_links or not _is_edital_title(title):
                 continue

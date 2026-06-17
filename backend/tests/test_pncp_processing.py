@@ -22,6 +22,6 @@ def test_process_pncp_opportunities_cleans_raw_data():
     assert cleaned["title"] == "Aviso de Contratação Direta nº 00001/2021"
     assert cleaned["description"] == "Contratação de serviço especializado"
     assert cleaned["deadline"] == date(2026, 6, 30)
-    assert cleaned["link"] == "https://pncp.gov.br/compras/00394502000144/2021/1"
+    assert cleaned["link"] == "https://pncp.gov.br/editais/00394502000144/2021/1"
     assert cleaned["source_name"] == "PNCP"
     assert cleaned["source_url"] == "https://pncp.gov.br"

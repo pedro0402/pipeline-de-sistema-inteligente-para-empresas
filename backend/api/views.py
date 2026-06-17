@@ -29,14 +29,34 @@ def _active_opportunities_filter():
     )
 
 
+def _valid_finep_links_filter():
+    return or_(
+        ~Source.name.ilike("finep%"),
+        Opportunity.link.ilike("%/e/chamada-publica/%"),
+        Opportunity.link.ilike("%/chamadas-publicas/chamadapublica/%"),
+    )
+
+
+from processing.finep import normalize_finep_link
+from processing.pncp import normalize_pncp_link
+
+
 def _serialize_opportunity(opp, source=None, analysis=None):
+    source_name = source.name if source else None
+    if source_name == "PNCP":
+        link = normalize_pncp_link(opp.link)
+    elif source_name == "Finep":
+        link = normalize_finep_link(opp.link)
+    else:
+        link = opp.link
+
     return {
         "id": opp.id,
         "title": opp.title,
         "description": opp.description,
         "organization": opp.organization,
         "deadline": str(opp.deadline) if opp.deadline else None,
-        "link": opp.link,
+        "link": link,
         "location": opp.location,
         "collected_at": opp.collected_at.isoformat() if opp.collected_at else None,
         "source": (
@@ -81,7 +101,12 @@ def list_opportunities(request):
     """
     session = SessionLocal()
     try:
-        query = session.query(Opportunity).filter(_active_opportunities_filter())
+        query = (
+            session.query(Opportunity)
+            .join(Source, Opportunity.source_id == Source.id)
+            .filter(_active_opportunities_filter())
+            .filter(_valid_finep_links_filter())
+        )
 
         search = request.query_params.get("search")
         if search:
@@ -149,7 +174,9 @@ def top_opportunities(request):
         rows = (
             session.query(Opportunity, OpportunityAnalysis)
             .join(OpportunityAnalysis, OpportunityAnalysis.opportunity_id == Opportunity.id)
+            .join(Source, Opportunity.source_id == Source.id)
             .filter(_active_opportunities_filter())
+            .filter(_valid_finep_links_filter())
             .filter(OpportunityAnalysis.relevance_score.isnot(None))
             .order_by(OpportunityAnalysis.relevance_score.desc())
             .limit(limit)
@@ -175,8 +202,10 @@ def opportunity_detail(request, pk):
     try:
         opp = (
             session.query(Opportunity)
+            .join(Source, Opportunity.source_id == Source.id)
             .filter(Opportunity.id == pk)
             .filter(_active_opportunities_filter())
+            .filter(_valid_finep_links_filter())
             .first()
         )
 
@@ -429,7 +458,9 @@ def run_pipeline_and_save(request):
                 OpportunityAnalysis,
                 OpportunityAnalysis.opportunity_id == Opportunity.id
             )
+            .join(Source, Opportunity.source_id == Source.id)
             .filter(_active_opportunities_filter())
+            .filter(_valid_finep_links_filter())
             .filter(OpportunityAnalysis.relevance_score.isnot(None))
             .filter(OpportunityAnalysis.relevance_score >= 6)
         )
