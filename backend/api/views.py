@@ -8,6 +8,9 @@ from sqlalchemy import or_
 from core.database import SessionLocal
 from models.company_profile import CompanyProfile
 from models.user import User
+from models.opportunity import Opportunity
+from models.opportunity_analysis import OpportunityAnalysis
+from models.source import Source
 
 from werkzeug.security import generate_password_hash
 from werkzeug.security import check_password_hash
@@ -16,10 +19,8 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
 
-from core.database import SessionLocal
-from models.opportunity import Opportunity
-from models.opportunity_analysis import OpportunityAnalysis
-from models.source import Source
+from processing.finep import normalize_finep_link
+from processing.pncp import normalize_pncp_link
 
 
 def _active_opportunities_filter():
@@ -37,12 +38,50 @@ def _valid_finep_links_filter():
     )
 
 
-from processing.finep import normalize_finep_link
-from processing.pncp import normalize_pncp_link
+def _safe_json_loads(value, default=None):
+    if default is None:
+        default = []
+
+    if not value:
+        return default
+
+    try:
+        return json.loads(value)
+    except Exception:
+        return default
+
+
+def _set_if_attr(obj, field, value):
+    """
+    Só seta o campo se ele existir no model.
+    Isso evita erro caso o banco/model ainda não tenha cnpj, phone, website etc.
+    """
+    if hasattr(obj, field):
+        setattr(obj, field, value)
+
+
+def _serialize_company(company):
+    created_at = getattr(company, "created_at", None)
+
+    return {
+        "id": company.id,
+        "name": getattr(company, "name", None),
+        "cnpj": getattr(company, "cnpj", None),
+        "sector": getattr(company, "sector", None),
+        "size": getattr(company, "size", None),
+        "location": getattr(company, "location", None),
+        "website": getattr(company, "website", None),
+        "phone": getattr(company, "phone", None),
+        "annual_revenue": getattr(company, "annual_revenue", None),
+        "discovery_source": getattr(company, "discovery_source", None),
+        "interests": _safe_json_loads(getattr(company, "interests", None), []),
+        "created_at": created_at.isoformat() if created_at else None,
+    }
 
 
 def _serialize_opportunity(opp, source=None, analysis=None):
     source_name = source.name if source else None
+
     if source_name == "PNCP":
         link = normalize_pncp_link(opp.link)
     elif source_name == "Finep":
@@ -60,7 +99,11 @@ def _serialize_opportunity(opp, source=None, analysis=None):
         "location": opp.location,
         "collected_at": opp.collected_at.isoformat() if opp.collected_at else None,
         "source": (
-            {"id": source.id, "name": source.name, "base_url": source.base_url}
+            {
+                "id": source.id,
+                "name": source.name,
+                "base_url": source.base_url
+            }
             if source
             else None
         ),
@@ -79,27 +122,13 @@ def _serialize_opportunity(opp, source=None, analysis=None):
 
 @api_view(["GET"])
 def health(request):
-    """
-    GET /health
-
-    Health check para monitoramento do serviço (ex.: Render).
-    """
     return Response({"status": "ok"})
 
 
 @api_view(["GET"])
 def list_opportunities(request):
-    """
-    GET /opportunities
-
-    Query params (Filtros opcionais):
-        search       : filtra por título ou descrição (case-insensitive)
-        organization : filtra por organização
-        location     : filtra por localização
-        page         : número da página (default 1)
-        page_size    : itens por página (default 20, max 100)
-    """
     session = SessionLocal()
+
     try:
         query = (
             session.query(Opportunity)
@@ -109,19 +138,27 @@ def list_opportunities(request):
         )
 
         search = request.query_params.get("search")
+
         if search:
             pattern = f"%{search}%"
             query = query.filter(
-                Opportunity.title.ilike(pattern) | Opportunity.description.ilike(pattern)
+                Opportunity.title.ilike(pattern)
+                | Opportunity.description.ilike(pattern)
             )
 
         organization = request.query_params.get("organization")
+
         if organization:
-            query = query.filter(Opportunity.organization.ilike(f"%{organization}%"))
+            query = query.filter(
+                Opportunity.organization.ilike(f"%{organization}%")
+            )
 
         location = request.query_params.get("location")
+
         if location:
-            query = query.filter(Opportunity.location.ilike(f"%{location}%"))
+            query = query.filter(
+                Opportunity.location.ilike(f"%{location}%")
+            )
 
         total = query.count()
 
@@ -131,7 +168,10 @@ def list_opportunities(request):
             page = 1
 
         try:
-            page_size = min(100, max(1, int(request.query_params.get("page_size", 20))))
+            page_size = min(
+                100,
+                max(1, int(request.query_params.get("page_size", 20)))
+            )
         except ValueError:
             page_size = 20
 
@@ -143,37 +183,58 @@ def list_opportunities(request):
         )
 
         data = []
+
         for opp in opportunities:
-            source = session.query(Source).filter(Source.id == opp.source_id).first()
+            source = (
+                session.query(Source)
+                .filter(Source.id == opp.source_id)
+                .first()
+            )
+
             analysis = (
                 session.query(OpportunityAnalysis)
                 .filter(OpportunityAnalysis.opportunity_id == opp.id)
                 .first()
             )
-            data.append(_serialize_opportunity(opp, source=source, analysis=analysis))
 
-        return Response({"count": total, "page": page, "page_size": page_size, "results": data})
+            data.append(
+                _serialize_opportunity(
+                    opp,
+                    source=source,
+                    analysis=analysis
+                )
+            )
+
+        return Response({
+            "count": total,
+            "page": page,
+            "page_size": page_size,
+            "results": data
+        })
+
     finally:
         session.close()
 
+
 @api_view(["GET"])
 def top_opportunities(request):
-    """
-    GET /opportunities/top
-
-    Query params:
-        limit : quantidade de resultados (default 10, max 50)
-    """
     session = SessionLocal()
+
     try:
         try:
-            limit = min(50, max(1, int(request.query_params.get("limit", 10))))
+            limit = min(
+                50,
+                max(1, int(request.query_params.get("limit", 10)))
+            )
         except ValueError:
             limit = 10
 
         rows = (
             session.query(Opportunity, OpportunityAnalysis)
-            .join(OpportunityAnalysis, OpportunityAnalysis.opportunity_id == Opportunity.id)
+            .join(
+                OpportunityAnalysis,
+                OpportunityAnalysis.opportunity_id == Opportunity.id
+            )
             .join(Source, Opportunity.source_id == Source.id)
             .filter(_active_opportunities_filter())
             .filter(_valid_finep_links_filter())
@@ -184,21 +245,35 @@ def top_opportunities(request):
         )
 
         data = []
-        for opp, analysis in rows:
-            source = session.query(Source).filter(Source.id == opp.source_id).first()
-            data.append(_serialize_opportunity(opp, source=source, analysis=analysis))
 
-        return Response({"count": len(data), "results": data})
+        for opp, analysis in rows:
+            source = (
+                session.query(Source)
+                .filter(Source.id == opp.source_id)
+                .first()
+            )
+
+            data.append(
+                _serialize_opportunity(
+                    opp,
+                    source=source,
+                    analysis=analysis
+                )
+            )
+
+        return Response({
+            "count": len(data),
+            "results": data
+        })
+
     finally:
         session.close()
 
+
 @api_view(["GET"])
 def opportunity_detail(request, pk):
-    """
-    GET /opportunities/{id}
-    Retorna 404 se não encontrada.
-    """
     session = SessionLocal()
+
     try:
         opp = (
             session.query(Opportunity)
@@ -215,16 +290,29 @@ def opportunity_detail(request, pk):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        source = session.query(Source).filter(Source.id == opp.source_id).first()
+        source = (
+            session.query(Source)
+            .filter(Source.id == opp.source_id)
+            .first()
+        )
+
         analysis = (
             session.query(OpportunityAnalysis)
             .filter(OpportunityAnalysis.opportunity_id == opp.id)
             .first()
         )
 
-        return Response(_serialize_opportunity(opp, source=source, analysis=analysis))
+        return Response(
+            _serialize_opportunity(
+                opp,
+                source=source,
+                analysis=analysis
+            )
+        )
+
     finally:
         session.close()
+
 
 @csrf_exempt
 def register(request):
@@ -233,12 +321,13 @@ def register(request):
             {"error": "Método não permitido."},
             status=405
         )
-    
+
     session = SessionLocal()
 
     try:
         data = json.loads(request.body)
         email = data.get("email")
+
         existing_user = (
             session.query(User)
             .filter(User.email == email)
@@ -250,12 +339,18 @@ def register(request):
                 {"error": "Email já registrado."},
                 status=400
             )
-        
+
         company = CompanyProfile(
             name=data.get("company_name"),
+            cnpj=data.get("cnpj"),
             sector=data.get("sector"),
             size=data.get("size"),
             location=data.get("location"),
+            website=data.get("website"),
+            phone=data.get("phone"),
+            annual_revenue=data.get("annual_revenue"),
+            discovery_source=data.get("discovery_source"),
+            interests=json.dumps([]),
         )
 
         session.add(company)
@@ -279,13 +374,18 @@ def register(request):
             },
             status=201
         )
+
     except Exception as e:
         session.rollback()
 
         return JsonResponse(
-            {"error": "Erro ao processar registro.", "details": str(e)},
+            {
+                "error": "Erro ao processar registro.",
+                "details": str(e)
+            },
             status=500
         )
+
     finally:
         session.close()
 
@@ -317,10 +417,7 @@ def login(request):
                 status=401
             )
 
-        if not check_password_hash(
-            user.password_hash,
-            password
-        ):
+        if not check_password_hash(user.password_hash, password):
             return JsonResponse(
                 {"error": "Senha inválida."},
                 status=401
@@ -348,6 +445,7 @@ def login(request):
     finally:
         session.close()
 
+
 @api_view(["GET", "PUT"])
 def interests_view(request):
     session = SessionLocal()
@@ -356,35 +454,53 @@ def interests_view(request):
         if request.method == "GET":
             user_id = request.query_params.get("user_id")
 
-            user = session.query(User).filter(User.id == user_id).first()
+            user = (
+                session.query(User)
+                .filter(User.id == user_id)
+                .first()
+            )
 
             if not user:
-                return Response({"error": "Usuário não encontrado"}, status=404)
+                return Response(
+                    {"error": "Usuário não encontrado"},
+                    status=404
+                )
 
-            company = session.query(CompanyProfile).filter(
-                CompanyProfile.id == user.company_id
-            ).first()
+            company = (
+                session.query(CompanyProfile)
+                .filter(CompanyProfile.id == user.company_id)
+                .first()
+            )
 
             return Response({
-                "interests": json.loads(company.interests or "[]")
+                "interests": _safe_json_loads(
+                    getattr(company, "interests", None),
+                    []
+                )
             })
 
-        # -------------------------
-        # PUT (SALVAR INTERESSES)
-        # -------------------------
-        data = json.loads(request.body)
+        data = request.data
 
         interests = data.get("interests", [])
         user_id = data.get("user_id")
 
-        user = session.query(User).filter(User.id == user_id).first()
+        user = (
+            session.query(User)
+            .filter(User.id == user_id)
+            .first()
+        )
 
         if not user:
-            return Response({"error": "Usuário não encontrado"}, status=404)
+            return Response(
+                {"error": "Usuário não encontrado"},
+                status=404
+            )
 
-        company = session.query(CompanyProfile).filter(
-            CompanyProfile.id == user.company_id
-        ).first()
+        company = (
+            session.query(CompanyProfile)
+            .filter(CompanyProfile.id == user.company_id)
+            .first()
+        )
 
         company.interests = json.dumps(interests)
         session.commit()
@@ -397,15 +513,9 @@ def interests_view(request):
     finally:
         session.close()
 
+
 @api_view(["POST"])
 def run_pipeline_and_save(request):
-    """
-    POST /pipeline/run
-
-    Executa a pipeline para a empresa do usuário logado,
-    salva as oportunidades no banco e retorna os resultados.
-    """
-
     user_id = request.data.get("user_id")
     search = (request.data.get("search") or "").strip()
 
@@ -476,8 +586,7 @@ def run_pipeline_and_save(request):
             )
 
         rows = (
-            query
-            .order_by(OpportunityAnalysis.relevance_score.desc())
+            query.order_by(OpportunityAnalysis.relevance_score.desc())
             .limit(100)
             .all()
         )
@@ -504,6 +613,116 @@ def run_pipeline_and_save(request):
             "count": len(data),
             "results": data
         })
+
+    finally:
+        session.close()
+
+
+@api_view(["GET", "PUT"])
+def company_profile_view(request):
+    session = SessionLocal()
+
+    try:
+        if request.method == "GET":
+            user_id = request.query_params.get("user_id")
+
+            if not user_id:
+                return Response(
+                    {"error": "user_id é obrigatório."},
+                    status=400
+                )
+
+            user = (
+                session.query(User)
+                .filter(User.id == user_id)
+                .first()
+            )
+
+            if not user:
+                return Response(
+                    {"error": "Usuário não encontrado."},
+                    status=404
+                )
+
+            company = (
+                session.query(CompanyProfile)
+                .filter(CompanyProfile.id == user.company_id)
+                .first()
+            )
+
+            if not company:
+                return Response(
+                    {"error": "Empresa não encontrada."},
+                    status=404
+                )
+
+            return Response(_serialize_company(company))
+
+        data = request.data
+        user_id = data.get("user_id")
+
+        if not user_id:
+            return Response(
+                {"error": "user_id é obrigatório."},
+                status=400
+            )
+
+        user = (
+            session.query(User)
+            .filter(User.id == user_id)
+            .first()
+        )
+
+        if not user:
+            return Response(
+                {"error": "Usuário não encontrado."},
+                status=404
+            )
+
+        company = (
+            session.query(CompanyProfile)
+            .filter(CompanyProfile.id == user.company_id)
+            .first()
+        )
+
+        if not company:
+            return Response(
+                {"error": "Empresa não encontrada."},
+                status=404
+            )
+
+        _set_if_attr(company, "name", data.get("name", company.name))
+        _set_if_attr(company, "cnpj", data.get("cnpj", getattr(company, "cnpj", None)))
+        _set_if_attr(company, "sector", data.get("sector", company.sector))
+        _set_if_attr(company, "size", data.get("size", company.size))
+        _set_if_attr(company, "location", data.get("location", company.location))
+        _set_if_attr(company, "website", data.get("website", getattr(company, "website", None)))
+        _set_if_attr(company, "phone", data.get("phone", getattr(company, "phone", None)))
+        _set_if_attr(company, "annual_revenue", data.get("annual_revenue", getattr(company, "annual_revenue", None)))
+        _set_if_attr(company, "discovery_source", data.get("discovery_source", getattr(company, "discovery_source", None)))
+
+        interests = data.get("interests")
+
+        if interests is not None and hasattr(company, "interests"):
+            company.interests = json.dumps(interests)
+
+        session.commit()
+
+        return Response({
+            "message": "Perfil da empresa atualizado com sucesso.",
+            "company": _serialize_company(company)
+        })
+
+    except Exception as error:
+        session.rollback()
+
+        return Response(
+            {
+                "error": "Erro ao processar perfil da empresa.",
+                "details": str(error)
+            },
+            status=500
+        )
 
     finally:
         session.close()

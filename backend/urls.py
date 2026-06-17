@@ -7,6 +7,7 @@ from api.views import (
     top_opportunities,
     interests_view,
     run_pipeline_and_save,
+    company_profile_view,
 )
 
 urlpatterns = [
@@ -18,4 +19,5 @@ urlpatterns = [
     path("login", views.login),
     path("company/interests", interests_view),
     path("pipeline/run", run_pipeline_and_save),
+    path("company/profile", company_profile_view),
 ]
