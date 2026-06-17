@@ -11,6 +11,7 @@ from intelligence.scorer import score_opportunity
 from models.opportunity import Opportunity
 from models.opportunity_analysis import OpportunityAnalysis
 from models.source import Source
+from processing.finep import is_valid_finep_link
 from processing.finep import process_finep_opportunities
 from processing.opportunity_filters import filter_active_opportunities
 from processing.pncp import process_pncp_opportunities
@@ -152,6 +153,9 @@ def save_to_db(items):
                 session.flush()
 
             link = item["link"]
+
+            if source_name.lower() == "finep" and not is_valid_finep_link(link):
+                continue
 
             if link in seen_links:
                 continue

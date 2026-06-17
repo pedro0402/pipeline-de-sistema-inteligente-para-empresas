@@ -1,96 +1,71 @@
-from urllib.parse import urljoin
-
 import requests
-from bs4 import BeautifulSoup
 
+from processing.finep import FINEP_API_URL, FINEP_REQUEST_HEADERS, FINEP_SOURCE_URL, build_finep_link
 from processing.opportunity_filters import is_active_deadline
 from processing.prosas import parse_deadline
 
 
 SOURCE_NAME = "Finep"
-SOURCE_URL = "https://www.finep.gov.br"
-CHAMADAS_URL = f"{SOURCE_URL}/chamadas-publicas"
-REQUEST_HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Accept-Language": "pt-BR,pt;q=0.9",
-}
+SOURCE_URL = FINEP_SOURCE_URL
+OPEN_FILTER = "situacao eq 'aberta'"
+PAGE_SIZE = 50
 
 
-def _fetch_page(start):
+def _fetch_page(page):
     response = requests.get(
-        CHAMADAS_URL,
-        params={"situacao": "aberta", "tFonte": "2", "start": start},
-        headers=REQUEST_HEADERS,
+        FINEP_API_URL,
+        params={
+            "filter": OPEN_FILTER,
+            "sort": "dataDePublicacao:desc",
+            "page": page,
+            "pageSize": PAGE_SIZE,
+        },
+        headers=FINEP_REQUEST_HEADERS,
         timeout=20,
     )
     response.raise_for_status()
-    return BeautifulSoup(response.text, "html.parser")
-
-
-def _parse_items(soup, seen_links):
-    opportunities = []
-
-    items = []
-    sections = soup.select("div.item-separator-conteudo")
-    if sections:
-        for section in sections:
-            header = section.select_one("h2.header.results")
-            if header is None or "abertas" not in header.get_text(strip=True).lower():
-                continue
-            items.extend(section.select("div.item"))
-    else:
-        items = soup.select("div.item")
-
-    for item in items:
-        link_tag = item.select_one('h3 a[href*="/chamadas-publicas/chamadapublica/"]')
-        if link_tag is None:
-            continue
-
-        link = urljoin(SOURCE_URL, link_tag.get("href", ""))
-        if not link or link in seen_links:
-            continue
-
-        prazo_span = item.select_one("div.prazo span")
-        prazo_value = prazo_span.get_text(strip=True) if prazo_span else ""
-
-        if not is_active_deadline(parse_deadline(prazo_value)):
-            continue
-
-        opportunities.append(
-            {
-                "title": link_tag.get_text(strip=True),
-                "description": "",
-                "link": link,
-                "deadline": prazo_value or None,
-                "source_name": SOURCE_NAME,
-                "source_url": SOURCE_URL,
-            }
-        )
-        seen_links.add(link)
-
-    return opportunities
-
-
-def _get_page_size(soup):
-    items = soup.select("div.item")
-    return len(items)
+    return response.json()
 
 
 def scrape_finep():
     opportunities = []
     seen_links = set()
-    start = 0
+    page = 1
 
-    first_soup = _fetch_page(start)
-    page_items = _parse_items(first_soup, seen_links)
-    opportunities.extend(page_items)
-    page_size = _get_page_size(first_soup) or 10
+    while True:
+        payload = _fetch_page(page)
+        items = payload.get("items") or []
+        if not items:
+            break
 
-    while len(page_items) == page_size:
-        start += page_size
-        soup = _fetch_page(start)
-        page_items = _parse_items(soup, seen_links)
-        opportunities.extend(page_items)
+        for item in items:
+            api_id = item.get("id")
+            if not api_id:
+                continue
 
-    print(f"  [Finep] {len(opportunities)} editais coletados")
+            deadline_raw = item.get("prazoProposto")
+            if not is_active_deadline(parse_deadline(deadline_raw)):
+                continue
+
+            link = build_finep_link(api_id)
+            if link in seen_links:
+                continue
+
+            opportunities.append(
+                {
+                    "title": (item.get("titulo") or "Chamada Finep").strip(),
+                    "description": item.get("descricao") or "",
+                    "link": link,
+                    "deadline": deadline_raw,
+                    "source_name": SOURCE_NAME,
+                    "source_url": SOURCE_URL,
+                }
+            )
+            seen_links.add(link)
+
+        if page >= payload.get("lastPage", 1):
+            break
+        page += 1
+
+    print(f"  [Finep] {len(opportunities)} editais coletados ({page} páginas)")
     return opportunities

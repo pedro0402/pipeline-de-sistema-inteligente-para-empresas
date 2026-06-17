@@ -46,7 +46,7 @@ def test_scrape_pncp_collects_opportunities(monkeypatch):
     opportunity = opportunities[0]
     assert opportunity["title"] == "Edital de Chamamento nº 00001/2021"
     assert opportunity["description"] == "Contratação de serviço especializado"
-    assert opportunity["link"] == "https://pncp.gov.br/compras/00394502000144/2021/1"
+    assert opportunity["link"] == "https://pncp.gov.br/editais/00394502000144/2021/1"
     assert opportunity["deadline"] == "2026-06-30T17:00"
     assert opportunity["source_name"] == "PNCP"
     assert opportunity["source_url"] == "https://pncp.gov.br"
