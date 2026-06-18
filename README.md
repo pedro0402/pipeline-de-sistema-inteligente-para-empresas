@@ -55,26 +55,20 @@ Pipeline em Python para coletar oportunidades, processar dados e persistir resul
 
 	DATABASE_URL=postgresql://USUARIO:SENHA@HOST:5432/NOME_DO_BANCO
 
-## Como executar o pipeline
-Com o ambiente ativo, rode:
+6. Criar estrutura do banco de dados:
+	Com o ambiente ativo, rode:
 
-python run_pipeline.py
+	python create_tables.py
 
-Fluxo executado:
-- collect
-- process
-- analyze
-- save
-- report
+7. Rodar as migrates:
+	Com o ambiente ativo, rode:
 
-## Como rodar testes
-Dentro de backend:
+	python seed_company.py
+	
+## Como rodar o projeto
+	Com o ambiente ativo, rode:
 
-pytest -q
-
-Rodar apenas um arquivo:
-
-pytest -q tests/test_prosas_processing.py
+	python manage.py runserver
 
 ## Variaveis de ambiente
 - DATABASE_URL: obrigatoria para execucao do pipeline e testes de banco.
